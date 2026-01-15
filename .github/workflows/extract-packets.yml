@@ -191,10 +191,25 @@ jobs:
             git remote add origin "https://x-access-token:${GH_TOKEN}@github.com/${repo}.wiki.git"
           fi
 
-          # Copy all wiki markdown files (flat structure)
-          cp -f ../wiki/*.md ./
+          # Track which files are being added/updated
+          echo "Files to be updated:"
+          ls -1 ../wiki/*.md
 
-          echo "Copied wiki files:"
+          # Copy only the newly generated wiki files (incremental update)
+          # This preserves existing wiki pages for other versions
+          for file in ../wiki/*.md; do
+            if [ -f "$file" ]; then
+              basename=$(basename "$file")
+              if [ -f "$basename" ]; then
+                echo "Updating existing page: $basename"
+              else
+                echo "Adding new page: $basename"
+              fi
+              cp -f "$file" ./
+            fi
+          done
+
+          echo "Current wiki contents:"
           ls -la *.md
 
           # Commit and push
@@ -202,8 +217,20 @@ jobs:
           if git diff --staged --quiet; then
             echo "No wiki changes to commit"
           else
-            git commit -m "Update wiki documentation for version ${version}"
-            git push origin HEAD:master --force
+            # Create a detailed commit message
+            added_files=$(git diff --cached --name-only --diff-filter=A | wc -l)
+            modified_files=$(git diff --cached --name-only --diff-filter=M | wc -l)
+            
+            commit_msg="Update wiki for version ${version}"
+            if [ "$added_files" -gt 0 ]; then
+              commit_msg="${commit_msg} (+${added_files} new)"
+            fi
+            if [ "$modified_files" -gt 0 ]; then
+              commit_msg="${commit_msg} (~${modified_files} updated)"
+            fi
+            
+            git commit -m "$commit_msg"
+            git push origin HEAD:master
             echo "Wiki published successfully!"
           fi
 
